@@ -1,0 +1,13 @@
+node_modules
+dist
+.vite
+.DS_Store
+tsconfig.tsbuildinfo
+
+# Per-user Claude Code permission allowlists
+.claude/settings.local.json
+
+# Per-runner generated data — each user produces their own
+data/runner.json
+data/geocode-cache.json
+data/raw/
