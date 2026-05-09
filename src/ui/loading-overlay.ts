@@ -1,10 +1,6 @@
-const STYLE_ID = 'pj-loading-overlay-style';
+import { injectStyleOnce } from '../util/inject-style.js';
 
-function injectStyleOnce() {
-  if (document.getElementById(STYLE_ID)) return;
-  const style = document.createElement('style');
-  style.id = STYLE_ID;
-  style.textContent = `
+const STYLE = `
 .pj-loading-overlay {
   position: fixed;
   inset: 0;
@@ -49,8 +45,6 @@ function injectStyleOnce() {
   50% { opacity: 1; }
 }
 `;
-  document.head.appendChild(style);
-}
 
 export type LoadingHandle = {
   update(message: string, sub?: string): void;
@@ -58,7 +52,7 @@ export type LoadingHandle = {
 };
 
 export function showLoadingOverlay(initial = 'Activating tower…'): LoadingHandle {
-  injectStyleOnce();
+  injectStyleOnce('pj-loading-overlay-style', STYLE);
 
   const root = document.createElement('div');
   root.className = 'pj-loading-overlay';

@@ -160,11 +160,45 @@ export function computeTiers(races: PlacedRace[]): Tier[] {
 
 // Slight overshoot near the end — the camera "lands" on its target with a
 // subtle elastic settle rather than a flat stop. This is the "back" easing
-// from CSS animation convention, with a tame coefficient (1.4) so it reads
-// as cinematic, not bouncy.
-const c1 = 1.4;
-const c3 = c1 + 1;
-const easeOutBack = (t: number) => 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+// from CSS animation convention.
+//   GENTLE (1.4) — cluster / overview, ~6% overshoot, reads as "settling".
+//   PUNCHY (1.85) — race tier, ~9% overshoot, reads as "focus locking".
+function makeEaseOutBack(overshoot: number): (t: number) => number {
+  const c1 = overshoot;
+  const c3 = c1 + 1;
+  return (t: number) => 1 + c3 * Math.pow(t - 1, 3) + c1 * Math.pow(t - 1, 2);
+}
+const easeOutBackGentle = makeEaseOutBack(1.4);
+const easeOutBackPunchy = makeEaseOutBack(2.4);
+
+// Approximate angular distance between two lng/lat pairs. Cheap (no
+// trig); good enough to choose a duration bucket. Real great-circle
+// would be over-engineering for the same UX outcome.
+function angularDistance(a: [number, number], b: [number, number]): number {
+  const dLng = a[0] - b[0];
+  const dLat = a[1] - b[1];
+  return Math.sqrt(dLng * dLng + dLat * dLat);
+}
+
+// Map angular distance → flight duration. Short hops within a cluster
+// stay snappy (800ms); intercontinental flights linger (up to 2200ms)
+// so the long-haul reads as travel, not teleport.
+function durationForDistance(deg: number, base: number): number {
+  if (deg < 3) return Math.max(800, base * 0.75);   // intra-cluster
+  if (deg < 15) return base;                        // regional, ~current feel
+  if (deg < 50) return Math.round(base * 1.5);      // continental
+  return Math.round(base * 2.0);                    // intercontinental
+}
+
+// flyTo's parabolic zoom-out arc. Default 1.42 is fine for short hops;
+// long-haul looks more cinematic with a higher arc — camera pulls way
+// out, sails over, descends. Matches the duration buckets above.
+function curveForDistance(deg: number): number {
+  if (deg < 3) return 1.2;
+  if (deg < 15) return 1.42;
+  if (deg < 50) return 1.7;
+  return 2.0;
+}
 
 export type TierManagerOptions = {
   map: maplibregl.Map;
@@ -237,25 +271,40 @@ export class TierManager {
       console.warn(`[tiers] unknown tier id: ${id}`);
       return;
     }
-    const duration = opts.duration ?? this.duration;
     this._current = tier;
     this.flying = true;
     this.map.once('moveend', () => {
       this.flying = false;
     });
 
+    // Distance-aware pacing: short hops stay snappy, long-haul lingers.
+    // Caller-supplied duration (used by jumpTo with 0) wins.
+    const fromCenter = this.map.getCenter();
+    const targetCenter: [number, number] =
+      tier.kind === 'race'
+        ? tier.center
+        : (tier.bounds.getCenter().toArray() as [number, number]);
+    const dist = angularDistance([fromCenter.lng, fromCenter.lat], targetCenter);
+    const baseDuration = opts.duration ?? this.duration;
+    const duration =
+      opts.duration === 0 ? 0 : durationForDistance(dist, baseDuration);
+    const curve = curveForDistance(dist);
+
     if (tier.kind === 'race') {
+      // Race tier uses the punchier easing — the "focus lock" overshoot
+      // is what makes arrival feel like the camera *committed*.
       this.map.flyTo({
         center: tier.center,
         zoom: tier.zoom,
         duration,
-        easing: easeOutBack,
+        curve,
+        easing: easeOutBackPunchy,
       });
     } else {
       this.map.fitBounds(tier.bounds, {
         padding: this.padding,
         duration,
-        easing: easeOutBack,
+        easing: easeOutBackGentle,
         // Cap below the per-race tier zoom (13) so a tight 2-race cluster
         // reads as regional context, not street level.
         maxZoom: 10,

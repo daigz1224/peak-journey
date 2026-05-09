@@ -1,0 +1,368 @@
+{
+  "runner": {
+    "id": "5429214",
+    "name": "Guozheng DAI",
+    "country": "China",
+    "ageCategory": "M 23-34",
+    "profileUrl": "https://itra.run/RunnerSpace/dai.guozheng.5429214"
+  },
+  "races": [
+    {
+      "id": "117990",
+      "name": "Jiufeng Grand Master Trail - 30KM General",
+      "date": "2026-04-19",
+      "category": "Half Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 29,
+      "elevationGainM": 2045,
+      "endurancePoints": 2,
+      "genderRanking": 661,
+      "raceTime": "6:17:03",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/117990",
+      "location": {
+        "city": "huangyan",
+        "country": "China",
+        "raw": "huangyan, China"
+      },
+      "lat": 28.65319,
+      "lon": 121.2576325
+    },
+    {
+      "id": "116393",
+      "name": "MAMMUT Huangshan huizhou - 96km",
+      "date": "2026-03-28",
+      "category": "100K",
+      "countryCode": "CHN",
+      "distanceKm": 96,
+      "elevationGainM": 4618,
+      "endurancePoints": 4,
+      "genderRanking": 145,
+      "raceTime": "19:57:32",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/116393",
+      "location": {
+        "city": "Huizhou Ancient City",
+        "country": "China",
+        "raw": "Huizhou Ancient City, China (override:websearch)"
+      },
+      "lat": 29.8712,
+      "lon": 118.4332
+    },
+    {
+      "id": "116905",
+      "name": "HUNTER Trail Race - The Road to Mastery - 40K",
+      "date": "2026-03-15",
+      "category": "Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 39,
+      "elevationGainM": 2112,
+      "endurancePoints": 2,
+      "genderRanking": 20,
+      "raceTime": "8:34:27",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/116905",
+      "location": {
+        "city": "Anji",
+        "country": "China",
+        "raw": "Anji, China (override:manual)"
+      },
+      "lat": 30.6383107,
+      "lon": 119.6755006
+    },
+    {
+      "id": "112879",
+      "name": "XIHU QINGZHIWU LONGDONG TRAIL - HUANGLONG 30K",
+      "date": "2025-12-14",
+      "category": "Half Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 32,
+      "elevationGainM": 1723,
+      "endurancePoints": 2,
+      "genderRanking": 81,
+      "raceTime": "4:45:34",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/112879",
+      "location": {
+        "city": "HANGZHOU",
+        "country": "China",
+        "raw": "HANGZHOU, China"
+      },
+      "lat": 30.2489634,
+      "lon": 120.2052342
+    },
+    {
+      "id": "105238",
+      "name": "MaXi-Race China Jiangshan - 65KM Group",
+      "date": "2025-10-18",
+      "category": "50M",
+      "countryCode": "CHN",
+      "distanceKm": 66,
+      "elevationGainM": 4623,
+      "endurancePoints": 3,
+      "genderRanking": "DNF",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/105238",
+      "location": {
+        "city": "Jianglangshan",
+        "country": "China",
+        "raw": "Jianglangshan, China (override:websearch)"
+      },
+      "lat": 28.5297,
+      "lon": 118.5653
+    },
+    {
+      "id": "103105",
+      "name": "Kailas FUGA Yushan Sundown Trail Run - 15KM",
+      "date": "2025-07-12",
+      "category": "Half Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 15,
+      "elevationGainM": 873,
+      "endurancePoints": 0,
+      "genderRanking": 63,
+      "raceTime": "2:26:13",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/103105",
+      "location": {
+        "city": "Changshu",
+        "country": "China",
+        "raw": "Changshu, China"
+      },
+      "lat": 31.6572954,
+      "lon": 120.7480757
+    },
+    {
+      "id": "104335",
+      "name": "Anji Huangpu River Source Mountain Cross-Country Challenge - 35km",
+      "date": "2025-04-20",
+      "category": "Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 37,
+      "elevationGainM": 3241,
+      "endurancePoints": 2,
+      "genderRanking": 182,
+      "raceTime": "11:14:20",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/104335",
+      "location": {
+        "city": "anji",
+        "country": "China",
+        "raw": "anji, China"
+      },
+      "lat": 30.6383107,
+      "lon": 119.6755006
+    },
+    {
+      "id": "100452",
+      "name": "Kailas FUGA Guangfu Sakura Trail - 20KM",
+      "date": "2025-04-06",
+      "category": "Half Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 18,
+      "elevationGainM": 1130,
+      "endurancePoints": 1,
+      "genderRanking": 62,
+      "raceTime": "2:55:30",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/100452",
+      "location": {
+        "city": "Guangfu",
+        "country": "China",
+        "raw": "Guangfu, China (override:websearch)"
+      },
+      "lat": 31.27,
+      "lon": 120.44
+    },
+    {
+      "id": "102256",
+      "name": "Jiufeng Grand Master Trail - 30KM",
+      "date": "2025-03-09",
+      "category": "Half Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 29,
+      "elevationGainM": 2045,
+      "endurancePoints": 2,
+      "genderRanking": 616,
+      "raceTime": "5:37:43",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/102256",
+      "location": {
+        "city": "huangyan",
+        "country": "China",
+        "raw": "huangyan, China"
+      },
+      "lat": 28.65319,
+      "lon": 121.2576325
+    },
+    {
+      "id": "98531",
+      "name": "Kailas FUGA Dongshan Mt. New Year Trail Run - 20KM",
+      "date": "2025-01-05",
+      "category": "Half Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 19,
+      "elevationGainM": 956,
+      "endurancePoints": 1,
+      "genderRanking": 163,
+      "raceTime": "3:14:00",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/98531",
+      "location": {
+        "city": "Dongting Mountain",
+        "country": "China",
+        "raw": "Dongting Mountain, China (override:websearch)"
+      },
+      "lat": 31.0833,
+      "lon": 120.4167
+    },
+    {
+      "id": "94868",
+      "name": "SUZHOU 100 URBAN ULTRA TRAIL RACE - 15KM",
+      "date": "2024-11-24",
+      "category": "10K",
+      "countryCode": "CHN",
+      "distanceKm": 14,
+      "elevationGainM": 859,
+      "endurancePoints": 0,
+      "genderRanking": 134,
+      "raceTime": "2:33:23",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/94868",
+      "location": {
+        "city": "Suzhou",
+        "country": "China",
+        "raw": "Suzhou, China"
+      },
+      "lat": 31.311123,
+      "lon": 120.6212881
+    },
+    {
+      "id": "97674",
+      "name": "MOGAN MOUNTAIN RUNNING RACE - 30KM",
+      "date": "2024-10-26",
+      "category": "Half Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 31,
+      "elevationGainM": 1772,
+      "endurancePoints": 2,
+      "genderRanking": 374,
+      "raceTime": "5:20:47",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/97674",
+      "location": {
+        "city": "Moganshan",
+        "country": "China",
+        "raw": "Moganshan, China (override:websearch)"
+      },
+      "lat": 30.6297,
+      "lon": 119.8256
+    },
+    {
+      "id": "96726",
+      "name": "HANGZHOU SONG108 TRAIL RUNNING - 42K",
+      "date": "2024-10-13",
+      "category": "Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 41,
+      "elevationGainM": 2440,
+      "endurancePoints": 2,
+      "genderRanking": 144,
+      "raceTime": "8:37:48",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/96726",
+      "location": {
+        "city": "HANGZHOU",
+        "country": "China",
+        "raw": "HANGZHOU, China"
+      },
+      "lat": 30.2489634,
+      "lon": 120.2052342
+    },
+    {
+      "id": "92440",
+      "name": "Yushan Trail Challenge - 35KM",
+      "date": "2024-09-22",
+      "category": "Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 35,
+      "elevationGainM": 2010,
+      "endurancePoints": 2,
+      "genderRanking": 144,
+      "raceTime": "6:36:14",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/92440",
+      "location": {
+        "city": "Changshu",
+        "country": "China",
+        "raw": "Changshu, China"
+      },
+      "lat": 31.6572954,
+      "lon": 120.7480757
+    },
+    {
+      "id": "90740",
+      "name": "Nanjing Cross Country Challenge - 35K",
+      "date": "2024-05-19",
+      "category": "Half Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 34,
+      "elevationGainM": 1360,
+      "endurancePoints": 1,
+      "genderRanking": 165,
+      "raceTime": "7:29:08",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/90740",
+      "location": {
+        "city": "Zijin Mountain",
+        "country": "China",
+        "raw": "Zijin Mountain, China (override:websearch)"
+      },
+      "lat": 32.0683,
+      "lon": 118.835
+    },
+    {
+      "id": "92194",
+      "name": "SALOMON Spring Mountain Xingxing  - 30KM",
+      "date": "2024-04-27",
+      "category": "Half Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 28,
+      "elevationGainM": 1000,
+      "endurancePoints": 1,
+      "genderRanking": 24,
+      "raceTime": "4:25:32",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/92194",
+      "location": {
+        "city": "wuxi",
+        "country": "China",
+        "raw": "wuxi, China"
+      },
+      "lat": 31.5776626,
+      "lon": 120.2952752
+    },
+    {
+      "id": "97291",
+      "name": "TNF100 Ultra Trail Challenge Moganshan - 30kmchen",
+      "date": "2024-04-13",
+      "category": "Half Marathon",
+      "countryCode": "CHN",
+      "distanceKm": 32,
+      "elevationGainM": 1677,
+      "endurancePoints": 2,
+      "genderRanking": 602,
+      "raceTime": "6:54:11",
+      "raceScore": "locked",
+      "detailUrl": "https://itra.run/Races/RaceDetails/97291",
+      "location": {
+        "city": "Moganshan",
+        "country": "China",
+        "raw": "Moganshan, China (override:websearch)"
+      },
+      "lat": 30.6297,
+      "lon": 119.8256
+    }
+  ],
+  "fetchedAt": "2026-05-08T19:53:25.487Z"
+}

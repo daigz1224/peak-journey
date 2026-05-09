@@ -1,6 +1,12 @@
 import 'maplibre-gl/dist/maplibre-gl.css';
 import type maplibregl from 'maplibre-gl';
-import { loadRunnerData, raceYears, getYearFromDate } from './data/load.js';
+import {
+  loadRunnerData,
+  raceYears,
+  listFeaturedRunners,
+  activateFeaturedRunner,
+} from './data/load.js';
+import { filterRaces } from './util/race-stats.js';
 import { PALETTES, type PaletteName } from './scene/palettes.js';
 import {
   createMap,
@@ -13,14 +19,20 @@ import {
 import { attachRaceControls } from './scene/race-layer.js';
 import { computeTiers, TierManager, type Tier } from './scene/tiers.js';
 import { prewarmTiers } from './scene/tile-prewarm.js';
-import { createFogLayer, createScanLayer } from './scene/effect-layers.js';
+import { createFogLayer, createScanLayer, createParticleLayer } from './scene/effect-layers.js';
 import { createMarkerLayer } from './scene/marker-layer.js';
 import { attachMicroPan } from './scene/micro-pan.js';
 import { createSoundscape } from './scene/soundscape.js';
 import { createPanel } from './ui/panel.js';
 import { attachRacePopover } from './ui/race-popover.js';
 import { showLoadingOverlay, type LoadingHandle } from './ui/loading-overlay.js';
-import { exportPng } from './export/export-png.js';
+import { showKeyboardHints } from './ui/keyboard-hints.js';
+import { attachCursorAura } from './ui/cursor-aura.js';
+import { attachHeroCard } from './ui/hero-card.js';
+import { attachLetterbox } from './ui/letterbox.js';
+import { createPerfOverlay } from './dev/perf-overlay.js';
+import { showRunnerLoader } from './ui/runner-loader.js';
+import { exportPng, EXPORT_PRESETS } from './export/export-png.js';
 
 function registerTileCacheSW() {
   if (!('serviceWorker' in navigator)) return;
@@ -71,16 +83,19 @@ async function boot(loading: LoadingHandle) {
   const { runner, races } = loadRunnerData();
 
   if (races.length === 0) {
+    // Empty state — neither localStorage nor the bundled JSON have anything
+    // renderable. Show the drop overlay; on accept (or featured-select),
+    // reload so boot re-runs with the freshly stored payload.
     loading.close();
-    document.body.insertAdjacentHTML(
-      'beforeend',
-      `<div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;color:#fff;font-family:sans-serif;text-align:center;padding:2rem;">
-        <div>
-          <h2>No races to render.</h2>
-          <p>Run <code>pnpm run fetch:itra &lt;your-itra-url&gt;</code> first.</p>
-        </div>
-      </div>`,
-    );
+    showRunnerLoader({
+      title: 'Drop your runner.json',
+      subtitle: 'A trail running monument from your ITRA history.',
+      featured: listFeaturedRunners(),
+      onSelectFeatured: (slug) => {
+        if (activateFeaturedRunner(slug)) window.location.reload();
+      },
+      onAccepted: () => window.location.reload(),
+    });
     return;
   }
   console.log(`[peak-journey] ${runner.name}: ${races.length} placed races`);
@@ -91,6 +106,10 @@ async function boot(loading: LoadingHandle) {
   let currentYearMax = 0;
   let currentCategory: string | null = null; // null = all categories
   let showLabels = true;
+  // When on, exports composite a one-line stat strip at the bottom that
+  // reflects the *current filter* — so a 2024-only filter exports a
+  // 2024-only wallpaper.
+  let statStripEnabled = true;
 
   // Categories ordered by frequency (most common first), so "Half Marathon"
   // appears before "10K" if there are more half marathons.
@@ -118,13 +137,7 @@ async function boot(loading: LoadingHandle) {
     // Fog reveals follow the same predicate so a filtered-out race no longer
     // leaves a "hole in the fog with no marker inside" — the unselected
     // regions re-enter the dim. Predicate matches markerLayer.render exactly.
-    const filteredForFog = races.filter((r) => {
-      const y = getYearFromDate(r.date);
-      if (y < currentYearMin || y > currentYearMax) return false;
-      if (cats && cats.size > 0 && !cats.has(r.category ?? '')) return false;
-      return true;
-    });
-    fogLayer.setRaces(filteredForFog);
+    fogLayer.setRaces(filterRaces(races, { yearMin: currentYearMin, yearMax: currentYearMax, category: currentCategory }));
     map.triggerRepaint();
   }
 
@@ -147,13 +160,7 @@ async function boot(loading: LoadingHandle) {
   // most of the cache is filled.
   prewarmTiers(map, tiers, TILE_SOURCES[currentTile], {
     timeoutMs: 6000,
-  })
-    .then((p) =>
-      console.log(
-        `[peak-journey] prewarm: ${p.loaded}/${p.unique} tiles in ${Math.round(p.ms)}ms${p.timedOut ? ' (timed out)' : ''}`,
-      ),
-    )
-    .catch((err) => console.warn('[peak-journey] prewarm failed:', err));
+  }).catch((err) => console.warn('[peak-journey] prewarm failed:', err));
 
   const years = raceYears(races);
   currentYearMin = years.min;
@@ -170,6 +177,7 @@ async function boot(loading: LoadingHandle) {
       if (!showLabels) controls.setLabelsVisible(false);
       // Custom layers are cleared by setStyle — re-add in the same order.
       if (!map.getLayer(fogLayer.id)) map.addLayer(fogLayer);
+      if (!map.getLayer(particleLayer.id)) map.addLayer(particleLayer);
       if (!map.getLayer(markerLayer.id)) map.addLayer(markerLayer);
       if (!map.getLayer(scanLayer.id)) map.addLayer(scanLayer);
     });
@@ -178,12 +186,15 @@ async function boot(loading: LoadingHandle) {
   let panel: ReturnType<typeof createPanel>;
 
   // Sheikah-style custom layers, all WebGL2 on the same canvas as the map:
-  //   pj-fog    — multiply-blend dim outside reveal circles
-  //   pj-marker — breathing markers (replaces the now-invisible race-halo /
-  //               race-core MapLibre circles, which still serve hit detection)
-  //   pj-scan   — additive amber radial wave on tier transitions
-  // Order matters: fog dims the base, marker glows on top, scan tops everything.
+  //   pj-fog       — multiply-blend dim outside reveal circles
+  //   pj-particles — drifting amber motes (overview only, fades with zoom)
+  //   pj-marker    — breathing markers (replaces the now-invisible race-halo /
+  //                  race-core MapLibre circles, which still serve hit detection)
+  //   pj-scan      — additive amber radial wave on tier transitions
+  // Order: fog dims base → particles drift through the dim → markers glow on
+  // top of everything → scan tops it all when triggered.
   const fogLayer = createFogLayer(races);
+  const particleLayer = createParticleLayer();
   const markerLayer = createMarkerLayer(races, PALETTES[currentPalette]);
   const scanLayer = createScanLayer();
 
@@ -203,7 +214,18 @@ async function boot(loading: LoadingHandle) {
     };
     setTimeout(poll, 50);
   }
+  // Dev perf HUD — Cmd/Ctrl+Shift+P toggles. Wraps each custom layer's
+  // render() so we can see per-layer JS cost. Adding the overlay before
+  // addLayerWhenReady so the wrap is in place by the time MapLibre first
+  // calls render().
+  const perf = createPerfOverlay(map);
+  perf.registerLayer(fogLayer);
+  perf.registerLayer(particleLayer);
+  perf.registerLayer(markerLayer);
+  perf.registerLayer(scanLayer);
+
   addLayerWhenReady(fogLayer);
+  addLayerWhenReady(particleLayer);
   addLayerWhenReady(markerLayer);
   addLayerWhenReady(scanLayer);
   let showFog = true;
@@ -231,6 +253,12 @@ async function boot(loading: LoadingHandle) {
   // because attachMicroPan needs tierManager.isFlying.
   let microPan: ReturnType<typeof attachMicroPan> | null = null;
 
+  // Bottom-center title overlay (visible only on overview) and top/bottom
+  // black letterbox bars (active only off-overview). Both are pure-DOM
+  // overlays driven by the tier transitions below.
+  const heroCard = attachHeroCard(runner, races);
+  const letterbox = attachLetterbox();
+
   const tierManager = new TierManager({
     map,
     tiers,
@@ -243,6 +271,10 @@ async function boot(loading: LoadingHandle) {
       panel?.setTier(dropdownIdFor(t));
       scanLayer.trigger();
       sound.chime();
+      // Hero card visible only on overview (the "title screen"); letterbox
+      // bars only on cluster/race (the "shots"). The two are inverse.
+      heroCard.setVisible(t.kind === 'overview');
+      letterbox.setActive(t.kind !== 'overview');
       // Entry pulse on the markers this tier "is about". Overview is
       // skipped: pulsing all markers on Overview entry feels busy and
       // dilutes the "look here" intent.
@@ -271,10 +303,22 @@ async function boot(loading: LoadingHandle) {
   const FADE_IN_MS = 340;
   const SWAP_SCAN_MS = 800;
   let swapRaf = 0;
-  function withCinematicSwap(swap: () => void) {
+  // Convert a viewport (CSS-pixel) point — e.g. a chip's bounding-rect center —
+  // into the map container's logical coordinate space, which is what
+  // scanLayer.trigger expects. Returns undefined for offscreen / out-of-bounds
+  // origins so the scan falls back to its default screen-center.
+  function originForScan(viewportPx: [number, number] | undefined): [number, number] | undefined {
+    if (!viewportPx) return undefined;
+    const rect = map.getContainer().getBoundingClientRect();
+    const x = viewportPx[0] - rect.left;
+    const y = viewportPx[1] - rect.top;
+    if (x < 0 || y < 0 || x > rect.width || y > rect.height) return undefined;
+    return [x, y];
+  }
+  function withCinematicSwap(swap: () => void, originViewportPx?: [number, number]) {
     cancelAnimationFrame(swapRaf);
     const start = performance.now();
-    scanLayer.trigger(undefined, SWAP_SCAN_MS);
+    scanLayer.trigger(originForScan(originViewportPx), SWAP_SCAN_MS);
     let swapped = false;
     const tick = (now: number) => {
       const t = now - start;
@@ -316,6 +360,15 @@ async function boot(loading: LoadingHandle) {
   // the closing overlay.
   tierManager.jumpTo('overview');
   loading.update('Activating tower…', 'Ready');
+
+  // One-shot discoverability nudge — shows after the first idle stretch,
+  // hides on any input, never returns. Solves the "locked camera" UX side
+  // of cinematic mode without interrupting flow.
+  showKeyboardHints();
+
+  // Soft amber light that follows the cursor — gives the screen a
+  // gentle response to "I am looking here" without affecting interaction.
+  attachCursorAura(map.getContainer());
 
   // Marker click → fly to that race's close-up tier. Hover/popover behavior is
   // unchanged (driven by mouseenter, not click).
@@ -427,31 +480,33 @@ async function boot(loading: LoadingHandle) {
       soundEnabled: false,
       tiers: visibleTierOptions,
       currentTierId: 'overview',
+      exportPresets: EXPORT_PRESETS,
+      statStripEnabled,
     },
-    onPaletteChange: (p) => {
+    onPaletteChange: (p, origin) => {
       withCinematicSwap(() => {
         currentPalette = p;
         controls.applyPalette(PALETTES[p]);
         markerLayer.setPalette(PALETTES[p]);
-      });
+      }, origin);
     },
     onTileSourceChange: (s) => {
       currentTile = s;
       reattachAfterStyle();
       setTileSource(map, s, races, PALETTES[currentPalette]);
     },
-    onYearChange: (min, max) => {
+    onYearChange: (min, max, origin) => {
       withCinematicSwap(() => {
         currentYearMin = min;
         currentYearMax = max;
         applyFilter();
-      });
+      }, origin);
     },
-    onCategoryChange: (cat) => {
+    onCategoryChange: (cat, origin) => {
       withCinematicSwap(() => {
         currentCategory = cat;
         applyFilter();
-      });
+      }, origin);
     },
     onShowLabelsChange: (v) => {
       showLabels = v;
@@ -471,21 +526,63 @@ async function boot(loading: LoadingHandle) {
       }
     },
     onTierChange: (id) => tierManager.goToTier(id),
-    onExport: async (size) => {
-      const dims = size === '4K' ? { w: 3840, h: 2160 } : { w: 7680, h: 4320 };
+    onReplaceRunner: () => {
+      // Modal overlay; on accept (or featured-select) we reload so boot
+      // picks up the new payload. Cancel just dismisses, current view stays.
+      // Filter out the currently-rendered runner from the featured list so
+      // the user doesn't see "click here to load what you already have."
+      const featured = listFeaturedRunners().filter((f) => f.label !== runner.name);
+      showRunnerLoader({
+        title: 'Replace runner.json',
+        subtitle: `Currently rendering ${runner.name}. Drop a different runner.json or pick one below.`,
+        showCancel: true,
+        featured,
+        onSelectFeatured: (slug) => {
+          if (activateFeaturedRunner(slug)) window.location.reload();
+        },
+        onAccepted: () => window.location.reload(),
+      });
+    },
+    // Hover preview: spotlight what the click *would* select. We update fog
+    // only — markers staying put makes "this is a preview" legible.
+    onPreviewYear: (min, max) => {
+      fogLayer.setRaces(filterRaces(races, { yearMin: min, yearMax: max, category: currentCategory }));
+      map.triggerRepaint();
+    },
+    onPreviewCategory: (cat) => {
+      fogLayer.setRaces(filterRaces(races, { yearMin: currentYearMin, yearMax: currentYearMax, category: cat }));
+      map.triggerRepaint();
+    },
+    onPreviewClear: () => {
+      fogLayer.setRaces(filterRaces(races, { yearMin: currentYearMin, yearMax: currentYearMax, category: currentCategory }));
+      map.triggerRepaint();
+    },
+    onStatStripChange: (v) => { statStripEnabled = v; },
+    onExport: async (presetSlug) => {
+      const preset = EXPORT_PRESETS.find((p) => p.slug === presetSlug);
+      if (!preset) {
+        console.warn(`[peak-journey] unknown export preset: ${presetSlug}`);
+        return;
+      }
       const stamp = new Date().toISOString().slice(0, 10);
+      const safeName = runner.name.replace(/\s+/g, '-');
+      // Predicate matches applyFilter()'s mask exactly so the stat strip
+      // totals reflect the rendered scene, not the full dataset.
+      const filteredRaces = filterRaces(races, { yearMin: currentYearMin, yearMax: currentYearMax, category: currentCategory });
       await exportPng({
         map,
-        width: dims.w,
-        height: dims.h,
-        filename: `peak-journey-${runner.name.replace(/\s+/g, '-')}-${stamp}-${size}.png`,
+        preset,
+        filename: `peak-journey-${safeName}-${stamp}-${preset.slug}.png`,
+        statStrip: statStripEnabled
+          ? { runner, races: filteredRaces }
+          : undefined,
         onStatus: (s) => console.log(`[export] ${s}`),
       });
     },
   });
 
   // Debug handle for the preview console.
-  (window as unknown as { __pj: unknown }).__pj = { map, controls, runner, races, tierManager, tiers, fogLayer, scanLayer, markerLayer, microPan };
+  (window as unknown as { __pj: unknown }).__pj = { map, controls, runner, races, tierManager, tiers, fogLayer, scanLayer, markerLayer, particleLayer, microPan, perf };
 }
 
 const loading = showLoadingOverlay('Activating tower…');

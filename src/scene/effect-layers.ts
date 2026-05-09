@@ -79,18 +79,19 @@ void main() {
 
   float d = distance(frag, u_center);
   float waveCenter = u_maxRadius * u_progress;
-  // ~1.5 logical px line.
-  float widthPx = 1.5;
+  // ~2.5 logical px line — thicker so the wave reads as a deliberate
+  // "scanner sweep" rather than a hairline you have to hunt for.
+  float widthPx = 2.5;
   float dist = abs(d - waveCenter) / widthPx;
-  float ring = exp(-dist * dist * 1.2);
+  float ring = exp(-dist * dist * 1.0);
 
-  // Quick in, quick out — the ring is gone by the halfway mark so the
-  // tier transition's flyTo gets the rest of the screen to itself.
+  // Quick in, slightly longer out — the ring is gone before the flyTo
+  // settles but lingers long enough to be felt.
   float envIn = smoothstep(0.0, 0.10, u_progress);
-  float envOut = 1.0 - smoothstep(0.30, 0.55, u_progress);
+  float envOut = 1.0 - smoothstep(0.40, 0.65, u_progress);
   float envelope = envIn * envOut;
 
-  float intensity = ring * envelope * 0.22;
+  float intensity = ring * envelope * 0.55;
   if (intensity < 0.0025) discard;
 
   // Soft cream, much less saturated than amber. Reads as light, not paint.
@@ -245,6 +246,136 @@ export function createFogLayer(races: PlacedRace[]): FogLayer {
     },
     setFogVisible(v) {
       fogVisible = v;
+    },
+  };
+}
+
+// Drifting amber motes — full-screen particle field that breathes life into
+// the static overview camera. Strength fades along the same zoom curve as
+// the fog so particles disappear by the time you're at race tier (where
+// they'd just be visual noise on a city street).
+const PARTICLE_FS = `#version 300 es
+precision highp float;
+uniform vec2 u_resolution;
+uniform float u_time;        // seconds
+uniform float u_strength;    // 0..1, fades with zoom
+out vec4 fragColor;
+
+#define N_PARTICLES 28
+
+vec2 hash22(float i) {
+  vec2 p = vec2(i * 0.1031, i * 0.0973);
+  p = fract(p * vec2(443.897, 441.423));
+  p += dot(p, p.yx + 19.19);
+  return fract(vec2(p.x * p.y, (p.x + p.y) * p.x));
+}
+
+void main() {
+  vec2 frag = vec2(gl_FragCoord.x, u_resolution.y - gl_FragCoord.y);
+  float total = 0.0;
+
+  for (int i = 0; i < N_PARTICLES; i++) {
+    float fi = float(i);
+    vec2 seedA = hash22(fi);
+    vec2 seedB = hash22(fi + 47.0);
+
+    // Slow horizontal-biased drift; angle clusters near horizontal so it
+    // reads as wind, not chaos.
+    float speed = 6.0 + seedA.x * 10.0;            // logical px/sec
+    float angle = (seedB.x - 0.5) * 1.2;           // ±~70°
+    vec2 dir = vec2(cos(angle), sin(angle) * 0.6);
+
+    vec2 origin = seedA * u_resolution;
+    vec2 pos = origin + dir * u_time * speed;
+    pos = mod(pos, u_resolution);
+
+    // Cheap distance-squared early-out: skip the exp() for pixels far away.
+    // 6 px radius means ~10x10 = 100 px contribute per particle, vs.
+    // exp() on every one of the millions of pixels.
+    float radius = 1.6 + seedB.y * 1.2;
+    vec2 delta = frag - pos;
+    float d2 = dot(delta, delta);
+    float r2 = radius * radius;
+    if (d2 > r2 * 9.0) continue;
+    total += exp(-d2 / (r2 * 1.6));
+  }
+
+  if (total < 0.0025) discard;
+
+  vec3 amber = vec3(0.95, 0.74, 0.40);
+  float scaled = total * u_strength;
+  // Premultiplied alpha — additive on top of the fog/dim.
+  fragColor = vec4(amber * scaled * 0.95, scaled * 0.95);
+}
+`;
+
+export type ParticleLayer = maplibregl.CustomLayerInterface;
+
+export function createParticleLayer(): ParticleLayer {
+  let program: WebGLProgram | null = null;
+  let vao: WebGLVertexArrayObject | null = null;
+  let vbo: WebGLBuffer | null = null;
+  let mapRef: maplibregl.Map | null = null;
+  let u: Record<string, WebGLUniformLocation | null> = {};
+  const start = performance.now();
+
+  return {
+    id: 'pj-particles',
+    type: 'custom',
+    renderingMode: '2d',
+    onAdd(map, glOrig) {
+      mapRef = map;
+      const gl = glOrig as WebGL2RenderingContext;
+      program = linkProgram(gl, FULLSCREEN_VS, PARTICLE_FS);
+      const q = createQuadVAO(gl);
+      vao = q.vao;
+      vbo = q.vbo;
+      u = {
+        resolution: gl.getUniformLocation(program, 'u_resolution'),
+        time: gl.getUniformLocation(program, 'u_time'),
+        strength: gl.getUniformLocation(program, 'u_strength'),
+      };
+    },
+    render(glOrig, _args) {
+      if (!program || !vao || !mapRef) return;
+
+      const zoom = mapRef.getZoom();
+      // Same fade curve as fog: full at overview, none past zoom 12.
+      const tierFade = 1 - smoothstepJS(FOG_FADE_ZOOM_LO, FOG_FADE_ZOOM_HI, zoom);
+      if (tierFade < 0.001) return;
+
+      const gl = glOrig as WebGL2RenderingContext;
+      const w = gl.drawingBufferWidth;
+      const h = gl.drawingBufferHeight;
+
+      gl.useProgram(program);
+      gl.bindVertexArray(vao);
+
+      // Premultiplied additive — add to whatever's underneath.
+      gl.enable(gl.BLEND);
+      gl.blendFuncSeparate(gl.ONE, gl.ONE_MINUS_SRC_ALPHA, gl.ONE, gl.ONE_MINUS_SRC_ALPHA);
+      gl.disable(gl.DEPTH_TEST);
+
+      gl.uniform2f(u.resolution!, w, h);
+      gl.uniform1f(u.time!, (performance.now() - start) / 1000);
+      gl.uniform1f(u.strength!, tierFade);
+
+      gl.drawArrays(gl.TRIANGLES, 0, 3);
+      gl.bindVertexArray(null);
+
+      // Wobble already pumps the canvas at ~30fps which is plenty for slow
+      // particle drift — and triggering a repaint here would force the
+      // browser compositor to recomposite the entire stack every frame
+      // (huge fixed cost on high-DPR displays), so we deliberately don't.
+    },
+    onRemove(_map, glOrig) {
+      const gl = glOrig as WebGL2RenderingContext;
+      if (program) gl.deleteProgram(program);
+      if (vbo) gl.deleteBuffer(vbo);
+      if (vao) gl.deleteVertexArray(vao);
+      program = null;
+      vao = null;
+      vbo = null;
     },
   };
 }

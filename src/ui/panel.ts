@@ -1,5 +1,7 @@
 import { PALETTES, type PaletteName } from '../scene/palettes.js';
 import type { TileSourceName } from '../scene/map.js';
+import type { ExportPreset } from '../export/export-png.js';
+import { injectStyleOnce } from '../util/inject-style.js';
 
 export type TierOption = { id: string; label: string };
 
@@ -19,30 +21,43 @@ export type PanelOptions = {
     soundEnabled: boolean;
     tiers: TierOption[];
     currentTierId: string;
+    exportPresets: ExportPreset[];
+    /** Whether the stat strip is composited onto exports by default. */
+    statStripEnabled: boolean;
   };
-  onPaletteChange: (p: PaletteName) => void;
+  /** Optional originPx is the viewport-relative center of the chip the user
+   * clicked, in CSS pixels. Used to anchor the cinematic-swap scan wave at
+   * the originating chip rather than always at screen center. */
+  onPaletteChange: (p: PaletteName, originPx?: [number, number]) => void;
   onTileSourceChange: (s: TileSourceName) => void;
-  onYearChange: (min: number, max: number) => void;
+  onYearChange: (min: number, max: number, originPx?: [number, number]) => void;
   /** null = all categories. Otherwise the single selected category. */
-  onCategoryChange: (cat: string | null) => void;
+  onCategoryChange: (cat: string | null, originPx?: [number, number]) => void;
   onShowLabelsChange: (v: boolean) => void;
   onShowFogChange: (v: boolean) => void;
   onSoundChange: (v: boolean) => Promise<void> | void;
   onTierChange: (id: string) => void;
-  onExport: (size: '4K' | '8K') => void;
+  /** Hover-preview hooks: as the cursor passes over a chip, the consumer
+   * can update the fog reveals to spotlight the would-be filtered set —
+   * "see before you click." Markers stay put. Clear fires on pointerleave
+   * of the row so cursor travel between sibling chips doesn't flicker. */
+  onPreviewYear?: (min: number, max: number) => void;
+  onPreviewCategory?: (cat: string | null) => void;
+  onPreviewClear?: () => void;
+  /** Fired when the user changes the stat-strip toggle. */
+  onStatStripChange: (v: boolean) => void;
+  /** Slug from EXPORT_PRESETS — main.ts looks up the preset and runs export. */
+  onExport: (presetSlug: string) => void;
+  /** Fired when the user clicks "Replace runner…" — main.ts opens the
+   * runner-loader overlay and reloads on success. */
+  onReplaceRunner: () => void;
 };
 
 export type PanelHandle = {
   setTier(id: string): void;
 };
 
-const STYLE_ID = 'pj-panel-style';
-
-function injectStyleOnce() {
-  if (document.getElementById(STYLE_ID)) return;
-  const style = document.createElement('style');
-  style.id = STYLE_ID;
-  style.textContent = `
+const STYLE = `
 .pj-panel {
   position: fixed;
   top: 18px;
@@ -67,6 +82,66 @@ function injectStyleOnce() {
   opacity: 0;
   pointer-events: none;
   transform: translateX(12px);
+}
+
+/* Collapsed rail: thin vertical strip with just the title glyph + a chevron
+ * to re-expand. Solves "the panel blocks my view" without losing access —
+ * still 1 click away. State persisted to localStorage so the choice sticks
+ * across reloads. */
+.pj-panel.is-rail {
+  width: 36px;
+  padding: 12px 0 12px;
+}
+.pj-panel.is-rail .pj-panel-section,
+.pj-panel.is-rail .pj-panel-divider,
+.pj-panel.is-rail .pj-panel-foot {
+  display: none;
+}
+.pj-panel.is-rail .pj-panel-title {
+  font-size: 0;
+  margin: 0;
+  justify-content: center;
+}
+.pj-panel.is-rail .pj-panel-title::before {
+  font-size: 11px;
+  margin: 0;
+}
+
+/* Quiet collapse / expand toggle. Lives INSIDE the panel — no overhang,
+ * no chrome — so it reads as part of the panel rather than a chunky drawer
+ * pull. Top-right when expanded; centered under the diamond when railed. */
+.pj-panel-toggle {
+  background: transparent;
+  border: 0;
+  padding: 0;
+  width: 18px;
+  height: 18px;
+  font-family: inherit;
+  font-size: 16px;
+  line-height: 1;
+  color: rgba(255, 184, 74, 0.45);
+  cursor: pointer;
+  position: absolute;
+  top: 10px;
+  right: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: color 140ms ease-out, transform 140ms ease-out;
+}
+.pj-panel-toggle:hover {
+  color: #ffd784;
+  transform: translateX(-2px);
+}
+.pj-panel.is-rail .pj-panel-toggle {
+  /* In rail mode the chevron sits centered under the diamond, not floating
+   * in a corner. Switch from absolute → static so it flows in the column. */
+  position: static;
+  margin: 8px auto 0;
+  transform: none;
+}
+.pj-panel.is-rail .pj-panel-toggle:hover {
+  transform: translateX(2px);
 }
 
 .pj-panel::before {
@@ -293,6 +368,35 @@ function injectStyleOnce() {
   gap: 6px;
 }
 
+.pj-export-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 6px;
+  margin-top: 8px;
+}
+
+.pj-panel-foot {
+  margin-top: 14px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 184, 74, 0.10);
+  text-align: center;
+}
+.pj-replace-link {
+  background: transparent;
+  border: 0;
+  font-family: inherit;
+  font-size: 9.5px;
+  letter-spacing: 0.22em;
+  text-transform: uppercase;
+  color: rgba(216, 211, 194, 0.42);
+  cursor: pointer;
+  padding: 4px 8px;
+  transition: color 140ms ease-out;
+}
+.pj-replace-link:hover {
+  color: rgba(255, 184, 74, 0.85);
+}
+
 .pj-button {
   flex: 1 1 50%;
   padding: 8px 6px;
@@ -329,8 +433,6 @@ function injectStyleOnce() {
   margin-top: 1px;
 }
 `;
-  document.head.appendChild(style);
-}
 
 function el(tag: string, className?: string, text?: string): HTMLElement {
   const e = document.createElement(tag);
@@ -339,14 +441,69 @@ function el(tag: string, className?: string, text?: string): HTMLElement {
   return e;
 }
 
+// Viewport-relative center of an element in CSS pixels. Used to anchor the
+// cinematic-swap scan wave at the chip the user just clicked.
+function chipOrigin(elm: HTMLElement): [number, number] {
+  const r = elm.getBoundingClientRect();
+  return [r.left + r.width / 2, r.top + r.height / 2];
+}
+
+// Collapsed/expanded preference is persisted so a user who collapses once
+// gets the slim rail on every subsequent visit.
+const COLLAPSE_KEY = 'pj-panel-mode-v1';
+type PanelMode = 'expanded' | 'rail';
+function readSavedMode(): PanelMode {
+  try {
+    const v = localStorage.getItem(COLLAPSE_KEY);
+    if (v === 'rail' || v === 'expanded') return v;
+  } catch { /* ignore — private mode etc. */ }
+  return 'expanded';
+}
+function saveMode(m: PanelMode) {
+  try { localStorage.setItem(COLLAPSE_KEY, m); } catch { /* ignore */ }
+}
+
 export function createPanel(opts: PanelOptions): PanelHandle {
-  injectStyleOnce();
+  injectStyleOnce('pj-panel-style', STYLE);
 
   const root = el('div', 'pj-panel');
   document.body.appendChild(root);
 
   const title = el('div', 'pj-panel-title', 'Peak Journey');
   root.appendChild(title);
+
+  // Collapse / expand toggle. Quiet glyph — top-right when expanded
+  // (absolute positioned), centered below the diamond when railed (static
+  // flow, appears AFTER title in DOM so it sits below).
+  const toggle = document.createElement('button');
+  toggle.className = 'pj-panel-toggle';
+  toggle.type = 'button';
+  toggle.title = 'Collapse panel';
+  toggle.textContent = '›';
+  root.appendChild(toggle);
+
+  let mode: PanelMode = readSavedMode();
+  function applyMode() {
+    root.classList.toggle('is-rail', mode === 'rail');
+    toggle.textContent = mode === 'rail' ? '‹' : '›';
+    toggle.title = mode === 'rail' ? 'Expand panel' : 'Collapse panel';
+  }
+  applyMode();
+
+  function setMode(next: PanelMode) {
+    mode = next;
+    saveMode(mode);
+    applyMode();
+  }
+
+  toggle.addEventListener('click', (e) => {
+    e.stopPropagation();
+    setMode(mode === 'rail' ? 'expanded' : 'rail');
+  });
+  // Rail click anywhere → expand (whole 36px column is a generous target).
+  root.addEventListener('click', () => {
+    if (mode === 'rail') setMode('expanded');
+  });
 
   // ── Tier strip ────────────────────────────────────────────
   const tierSection = el('div', 'pj-panel-section');
@@ -401,11 +558,15 @@ export function createPanel(opts: PanelOptions): PanelHandle {
       chip.addEventListener('click', () => {
         for (const o of yearChips) o.classList.remove('is-active');
         chip.classList.add('is-active');
-        opts.onYearChange(c.min, c.max);
+        opts.onYearChange(c.min, c.max, chipOrigin(chip));
+      });
+      chip.addEventListener('mouseenter', () => {
+        opts.onPreviewYear?.(c.min, c.max);
       });
       yearRow.appendChild(chip);
       yearChips.push(chip);
     }
+    yearRow.addEventListener('pointerleave', () => opts.onPreviewClear?.());
     root.appendChild(yearSection);
     root.appendChild(el('div', 'pj-panel-divider'));
   }
@@ -428,11 +589,15 @@ export function createPanel(opts: PanelOptions): PanelHandle {
       chip.addEventListener('click', () => {
         for (const o of catChips) o.classList.remove('is-active');
         chip.classList.add('is-active');
-        opts.onCategoryChange(c.value);
+        opts.onCategoryChange(c.value, chipOrigin(chip));
+      });
+      chip.addEventListener('mouseenter', () => {
+        opts.onPreviewCategory?.(c.value);
       });
       catRow.appendChild(chip);
       catChips.push(chip);
     }
+    catRow.addEventListener('pointerleave', () => opts.onPreviewClear?.());
     root.appendChild(catSection);
     root.appendChild(el('div', 'pj-panel-divider'));
   }
@@ -450,7 +615,7 @@ export function createPanel(opts: PanelOptions): PanelHandle {
     chip.addEventListener('click', () => {
       for (const c of paletteChips.values()) c.classList.remove('is-active');
       chip.classList.add('is-active');
-      opts.onPaletteChange(name);
+      opts.onPaletteChange(name, chipOrigin(chip));
     });
     paletteRow.appendChild(chip);
     paletteChips.set(name, chip);
@@ -510,19 +675,38 @@ export function createPanel(opts: PanelOptions): PanelHandle {
   // ── Export ────────────────────────────────────────────────
   const exportSection = el('div', 'pj-panel-section');
   exportSection.appendChild(el('div', 'pj-panel-label', 'Export'));
-  const exportRow = el('div', 'pj-export-row');
-  exportSection.appendChild(exportRow);
 
-  function makeExportButton(size: '4K' | '8K', subText: string) {
+  // Stat strip toggle — composited onto the PNG, reflecting current filter.
+  const stripRow = el('div', 'pj-toggle-row');
+  exportSection.appendChild(stripRow);
+  const stripToggle = makeToggle('Stat strip', opts.initial.statStripEnabled, opts.onStatStripChange);
+  stripRow.appendChild(stripToggle);
+
+  // 2-column grid of preset buttons. Each preset hits onExport(slug); main.ts
+  // resolves the slug back to dimensions and runs the export.
+  const exportGrid = el('div', 'pj-export-grid');
+  exportSection.appendChild(exportGrid);
+
+  for (const p of opts.initial.exportPresets) {
     const btn = document.createElement('button');
     btn.className = 'pj-button';
-    btn.innerHTML = `${size}<span class="pj-button-sub">${subText}</span>`;
-    btn.addEventListener('click', () => opts.onExport(size));
-    return btn;
+    btn.innerHTML = `${p.label}<span class="pj-button-sub">${p.width} × ${p.height}</span>`;
+    btn.addEventListener('click', () => opts.onExport(p.slug));
+    exportGrid.appendChild(btn);
   }
-  exportRow.appendChild(makeExportButton('4K', '3840 × 2160'));
-  exportRow.appendChild(makeExportButton('8K', '7680 × 4320'));
   root.appendChild(exportSection);
+
+  // ── Foot: Replace runner ──────────────────────────────────
+  // Tiny, mute, deliberately under-styled — visitors who land via a shared
+  // deploy can swap in their own runner.json from here. Power users who
+  // prefer the CLI never need to notice it.
+  const foot = el('div', 'pj-panel-foot');
+  const replaceBtn = document.createElement('button');
+  replaceBtn.className = 'pj-replace-link';
+  replaceBtn.textContent = 'Replace runner…';
+  replaceBtn.addEventListener('click', () => opts.onReplaceRunner());
+  foot.appendChild(replaceBtn);
+  root.appendChild(foot);
 
   return {
     setTier(id) {

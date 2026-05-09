@@ -1,23 +1,18 @@
 import maplibregl from 'maplibre-gl';
 import { RACE_CORE_LAYER, RACE_HALO_LAYER } from '../scene/map.js';
 import { getYearFromDate, type PlacedRace } from '../data/load.js';
+import { injectStyleOnce } from '../util/inject-style.js';
 
 // Bind interaction to both halo and core: the halo is the visible glow the user
 // aims at (radius 18-64px), while the core is just a small bright dot (4-14px).
 // Without the halo in the hit list, clicks "on the marker" mostly miss.
 const HIT_LAYERS = [RACE_HALO_LAYER, RACE_CORE_LAYER];
 
-const STYLE_ID = 'pj-race-popover-style';
-
-function injectStyleOnce() {
-  if (document.getElementById(STYLE_ID)) return;
-  const style = document.createElement('style');
-  style.id = STYLE_ID;
-  // Sheikah-aligned popover: dark glass card with amber accents, replaces
-  // the MapLibre default white tooltip + tip. Two visual passes wired into
-  // one stylesheet so MapLibre's chrome doesn't leak through and the card
-  // blends with the fog/marker palette underneath.
-  style.textContent = `
+// Sheikah-aligned popover: dark glass card with amber accents, replaces
+// the MapLibre default white tooltip + tip. Two visual passes wired into
+// one stylesheet so MapLibre's chrome doesn't leak through and the card
+// blends with the fog/marker palette underneath.
+const STYLE = `
 .maplibregl-popup-content {
   background: transparent !important;
   padding: 0 !important;
@@ -146,8 +141,6 @@ function injectStyleOnce() {
   color: rgba(252, 218, 140, 1);
 }
 `;
-  document.head.appendChild(style);
-}
 
 function row(dl: HTMLElement, label: string, value: string) {
   const dt = document.createElement('dt');
@@ -251,7 +244,7 @@ export function attachRacePopover(
   races: PlacedRace[],
   opts: AttachRacePopoverOptions = {},
 ): void {
-  injectStyleOnce();
+  injectStyleOnce('pj-race-popover-style', STYLE);
 
   const byId = new Map(races.map((r) => [r.id, r]));
   // Pre-bucket races by year so each hover doesn't re-scan the full set.

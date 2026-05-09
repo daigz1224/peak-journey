@@ -1,0 +1,133 @@
+{
+  "_doc": "Per-race location overrides applied AFTER ITRA + Nominatim auto-geocode but BEFORE writing runner.json. Keyed by ITRA race id (string). Use this to (a) correct ITRA's coarse city field, (b) provide coords for races Nominatim couldn't resolve, or (c) pin coords found via web research. The fetcher merges these on top of auto-geocoded data. Re-runs preserve them.",
+
+  "_schema": {
+    "city": "Display name for popover. Optional — falls back to auto value.",
+    "country": "Country name. Optional.",
+    "lat": "Required if overriding location.",
+    "lon": "Required if overriding location.",
+    "source": "manual | websearch | other",
+    "confidence": "high | medium | low",
+    "note": "Why we overrode + where the coords came from."
+  },
+
+  "97291": {
+    "city": "Moganshan",
+    "country": "China",
+    "lat": 30.6297,
+    "lon": 119.8256,
+    "source": "websearch",
+    "confidence": "high",
+    "note": "TNF100 Moganshan: ITRA listed 'Huzhou' (prefecture city, ~30km away). Mt Mogan (莫干山) is in Deqing County. Coords from latlong.net + Wikipedia: Mount Mogan is at 30°37'47\"N 119°49'31\"E."
+  },
+
+  "97674": {
+    "city": "Moganshan",
+    "country": "China",
+    "lat": 30.6297,
+    "lon": 119.8256,
+    "source": "websearch",
+    "confidence": "high",
+    "note": "MOGAN MOUNTAIN RUNNING RACE — same venue as 97291."
+  },
+
+  "101943": {
+    "city": "Siguniangshan",
+    "country": "China",
+    "lat": 31.0884,
+    "lon": 102.8842,
+    "source": "manual",
+    "confidence": "high",
+    "note": "Nominatim couldn't resolve full Chinese admin path '阿坝藏族羌族自治州小金县四姑娘山镇' (returned country fallback, rejected by addresstype guard). Coords are for Siguniangshan Town in Xiaojin County, Aba Tibetan Autonomous Prefecture, Sichuan."
+  },
+
+  "105238": {
+    "city": "Jianglangshan",
+    "country": "China",
+    "lat": 28.5297,
+    "lon": 118.5653,
+    "source": "websearch",
+    "confidence": "high",
+    "note": "MaXi-Race China Jiangshan 65KM: ITRA listed 'jiangshan' (the city). Race starts/centers at Jianglang Mountain scenic area (江郎山), 25km southwest of Jiangshan city. Coords from Wikipedia: 28°31'47\"N 118°33'55\"E."
+  },
+
+  "105849": {
+    "city": "Tiger Leaping Gorge",
+    "country": "China",
+    "lat": 27.2349,
+    "lon": 100.1262,
+    "source": "websearch",
+    "confidence": "high",
+    "note": "Tiger Leaping Gorge Extreme Race: ITRA listed 'shangri-la' (city, 80km north). Actual gorge sits between Lijiang and Shangri-La on the Jinsha River. Coords from latlong.net."
+  },
+
+  "106762": {
+    "city": "Lushan",
+    "country": "China",
+    "lat": 29.5812,
+    "lon": 116.0153,
+    "source": "websearch",
+    "confidence": "high",
+    "note": "Mt.Lushan Trail Running: ITRA listed 'jiujiang' (the prefecture). Lushan (庐山) is the famous mountain south of Jiujiang. Coords align with Hanyang Peak (1,474m). Source: Baidu Baike, Mapcarta."
+  },
+
+  "116393": {
+    "city": "Huizhou Ancient City",
+    "country": "China",
+    "lat": 29.8712,
+    "lon": 118.4332,
+    "source": "websearch",
+    "confidence": "high",
+    "note": "MAMMUT Huangshan Huizhou Ancient City Trail Run: ITRA listed 'Huangshan' (the city, ~25km west). Race centers on Huizhou Ancient City in Shexian county. Coords are Shexian county center per Baidu Baike."
+  },
+
+  "116905": {
+    "city": "Anji",
+    "country": "China",
+    "lat": 30.6383107,
+    "lon": 119.6755006,
+    "source": "manual",
+    "confidence": "high",
+    "note": "HUNTER Trail Race: runner confirmed it's at Anji county (within Huzhou prefecture). ITRA listed only 'Huzhou'."
+  },
+
+  "90740": {
+    "city": "Zijin Mountain",
+    "country": "China",
+    "lat": 32.0683,
+    "lon": 118.8350,
+    "source": "websearch",
+    "confidence": "medium",
+    "note": "Nanjing Cross Country Challenge: ITRA listed 'Nanjing' (city center). Most Nanjing trail races run on Purple Mountain (紫金山/Zijinshan) east of the city. Coords are Zijin Shan center. If race is actually on Laoshan north of the Yangtze, override needs adjustment."
+  },
+
+  "98531": {
+    "city": "Dongting Mountain",
+    "country": "China",
+    "lat": 31.0833,
+    "lon": 120.4167,
+    "source": "websearch",
+    "confidence": "medium",
+    "note": "Kailas FUGA Dongshan Mt New Year Trail: ITRA listed 'Suzhou' (city). Dongshan (东山) refers to East Dongting Mountain, a peninsula in Taihu Lake ~25km southwest of Suzhou city. Moli Peak (莫釐峰) is the named summit. Coords approximate the peninsula center."
+  },
+
+  "100452": {
+    "city": "Guangfu",
+    "country": "China",
+    "lat": 31.2700,
+    "lon": 120.4400,
+    "source": "websearch",
+    "confidence": "medium",
+    "note": "Kailas FUGA Guangfu Sakura Trail: ITRA listed 'SUZHOU' (city). Guangfu Town (光福镇) is on Taihu Lake's east shore, ~30km southwest of Suzhou city. Site of Tongguanyin Temple's Sakura Forest. Coords approximate town center."
+  },
+
+  "103074": {
+    "city": "Fuzhishan",
+    "country": "China",
+    "lat": 29.7350,
+    "lon": 120.9000,
+    "source": "websearch",
+    "confidence": "medium",
+    "note": "Shangyu Fuzhishan Sanlang Trail: ITRA listed 'Shaoxing' (prefecture city, ~50km away). Fuzhishan (覆卮山) is in Lingnan Town in southern Shangyu district, at the Shangyu/Shengzhou/Yuyao border. Main peak 861m. Coords approximate Lingnan Town."
+  }
+}

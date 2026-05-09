@@ -19,6 +19,7 @@ const ROOT = resolve(__dirname, '..');
 const DATA_DIR = resolve(ROOT, 'data');
 const RAW_DIR = resolve(DATA_DIR, 'raw');
 const GEOCODE_CACHE = resolve(DATA_DIR, 'geocode-cache.json');
+const OVERRIDES_FILE = resolve(DATA_DIR, 'race-location-overrides.json');
 const OUT_FILE = resolve(DATA_DIR, 'runner.json');
 
 const UA =
@@ -247,7 +248,9 @@ async function fetchAllRaces(runnerId: string, profileUrl: string): Promise<Race
   let viewedRunnerIsSubscriber = false;
 
   for (let pageNumber = 1; pageNumber <= RACES_API_MAX_PAGES; pageNumber++) {
-    const cachePath = resolve(RAW_DIR, `races-page-${pageNumber}.json`);
+    // Per-runner cache key — same fix as the profile cache; otherwise a
+    // second runner's first page hits the previous runner's cached blob.
+    const cachePath = resolve(RAW_DIR, `races-page-${runnerId}-${pageNumber}.json`);
     const enc = await fetchEncryptedRacePage(runnerId, pageNumber, cachePath, profileUrl);
     const data = decryptRacePage(enc);
     if (pageNumber === 1) viewedRunnerIsSubscriber = !!data.IsSubscriber;
@@ -298,13 +301,45 @@ async function saveGeocodeCache(cache: GeocodeCache) {
   await writeFile(GEOCODE_CACHE, JSON.stringify(cache, null, 2), 'utf8');
 }
 
+// ISO 3166-1 alpha-3 → alpha-2 for Nominatim's countrycodes= parameter.
+// ITRA emits alpha-3 (e.g. "CHN"); Nominatim expects alpha-2 ("cn"). Covers
+// the ~50 countries trail running actually happens in. Unknown codes
+// degrade gracefully — we just skip the scope hint.
+const ALPHA3_TO_ALPHA2: Record<string, string> = {
+  CHN: 'cn', USA: 'us', FRA: 'fr', ESP: 'es', GBR: 'gb', ITA: 'it', DEU: 'de',
+  JPN: 'jp', AUS: 'au', NZL: 'nz', CAN: 'ca', CHE: 'ch', AUT: 'at', NOR: 'no',
+  SWE: 'se', ZAF: 'za', NPL: 'np', PER: 'pe', CHL: 'cl', BRA: 'br', KOR: 'kr',
+  TWN: 'tw', HKG: 'hk', MAC: 'mo', SGP: 'sg', MYS: 'my', THA: 'th', VNM: 'vn',
+  IDN: 'id', PHL: 'ph', IND: 'in', RUS: 'ru', POL: 'pl', CZE: 'cz', HUN: 'hu',
+  ROU: 'ro', BGR: 'bg', GRC: 'gr', PRT: 'pt', NLD: 'nl', BEL: 'be', LUX: 'lu',
+  DNK: 'dk', FIN: 'fi', ISL: 'is', IRL: 'ie', MEX: 'mx', ARG: 'ar', URY: 'uy',
+  SVN: 'si', HRV: 'hr', MAR: 'ma', TUR: 'tr', ISR: 'il', ARE: 'ae',
+};
+
+// Nominatim importance is roughly Wikipedia-link-density-derived [0,1].
+// Cities sit ~0.3+, towns ~0.1–0.3, fuzzy fallbacks ~<0.1. Below this floor
+// the result is almost always nonsense.
+const IMPORTANCE_FLOOR = 0.3;
+
 async function geocode(
   query: string,
   cache: GeocodeCache,
+  alpha3CountryCode?: string,
 ): Promise<{ lat: number; lon: number } | undefined> {
-  const key = query.toLowerCase().trim();
-  const hit = cache[key];
+  // Cache key includes the country scope so the same query under different
+  // countries gets distinct entries — and so legacy un-scoped entries
+  // (cached pre-2026-05-09) don't shadow the new scoped lookups.
+  const cc = alpha3CountryCode
+    ? ALPHA3_TO_ALPHA2[alpha3CountryCode.toUpperCase()]
+    : undefined;
+  const normQuery = query.toLowerCase().trim();
+  const key = (cc ? `${cc}:` : '') + normQuery;
+  // Dual-lookup: also accept legacy un-scoped cache entries written before
+  // we started prefixing the country code. Migrates lazily — on hit, we
+  // copy the entry under the new scoped key so future reads short-circuit.
+  const hit = cache[key] ?? (cc ? cache[normQuery] : undefined);
   if (hit) {
+    if (cc && cache[key] === undefined) cache[key] = hit;
     if ('failed' in hit) return undefined;
     return { lat: hit.lat, lon: hit.lon };
   }
@@ -314,15 +349,43 @@ async function geocode(
   url.searchParams.set('q', query);
   url.searchParams.set('format', 'json');
   url.searchParams.set('limit', '1');
+  // Country scope: kills the worst-of-fuzzy bucket. With cc=cn, Nominatim
+  // can't return Charlotte Harbor, FL for "chn"; with cc=us, "Springfield"
+  // doesn't accidentally land in Australia. When cc is undefined we still
+  // search globally — the importance floor below catches most noise.
+  if (cc) url.searchParams.set('countrycodes', cc);
 
   const res = await fetch(url, { headers: { 'User-Agent': NOMINATIM_UA } });
   if (!res.ok) {
     cache[key] = { failed: true };
     return undefined;
   }
-  const arr = (await res.json()) as Array<{ lat: string; lon: string; display_name: string }>;
+  const arr = (await res.json()) as Array<{
+    lat: string;
+    lon: string;
+    display_name: string;
+    importance?: number;
+    addresstype?: string;
+  }>;
   const top = arr[0];
   if (!top) {
+    cache[key] = { failed: true };
+    return undefined;
+  }
+  // Reject country-level matches outright — when Nominatim can't parse a
+  // long admin path (e.g. "阿坝藏族羌族自治州小金县四姑娘山镇") it falls
+  // back to "China" and returns the country bbox centroid, which would put
+  // a marker hundreds of km from the actual race.
+  if (top.addresstype === 'country') {
+    console.warn(`      ! Nominatim fell back to country for "${query}" — rejected`);
+    cache[key] = { failed: true };
+    return undefined;
+  }
+  // Reject low-importance results — fuzzy "best guess" matches that the
+  // search couldn't anchor anywhere meaningful.
+  const importance = top.importance ?? 0;
+  if (importance < IMPORTANCE_FLOOR) {
+    console.warn(`      ! low importance (${importance.toFixed(2)}) for "${query}" — rejected`);
     cache[key] = { failed: true };
     return undefined;
   }
@@ -341,7 +404,13 @@ async function main() {
   await ensureDirs();
 
   console.log(`[1/4] Fetching profile + paginated race history: ${profileUrl}`);
-  const profileHtml = await fetchHtml(profileUrl, resolve(RAW_DIR, 'profile.html'));
+  // Per-runner cache key. Earlier the profile + paginated race history were
+  // cached under fixed names (`profile.html`, `races-page-N.json`), so the
+  // first runner's data leaked into subsequent fetches for other runners.
+  // Extracting the runner-id from the URL up front lets every cache file
+  // be namespaced by it.
+  const idFromUrl = profileUrl.match(/(\d+)(?:[/?#]|$)/)?.[1] ?? 'unknown';
+  const profileHtml = await fetchHtml(profileUrl, resolve(RAW_DIR, `profile-${idFromUrl}.html`));
 
   const runner = parseRunner(profileHtml, profileUrl);
   const races = await fetchAllRaces(runner.id, profileUrl);
@@ -368,10 +437,16 @@ async function main() {
       candidates.push(`${race.location.city}, ${race.location.country}`);
     }
     if (race.location?.country) candidates.push(race.location.country);
-    if (race.countryCode) candidates.push(race.countryCode);
+    // NOTE: do NOT fall back to `race.countryCode` — Nominatim happily
+    // returns nonsense for short ISO-style codes ("chn" → Charlotte
+    // Harbor, FL) and pins all unplaced races to the same wrong spot.
+    // Better to leave the race unplaced; the renderer skips lat==null.
 
     for (const q of candidates) {
-      const hit = await geocode(q, cache);
+      // Pass race.countryCode (alpha-3, e.g. "CHN") so geocode() can scope
+      // Nominatim to that country. The function maps to alpha-2 internally
+      // and degrades gracefully if we don't have the country in the table.
+      const hit = await geocode(q, cache, race.countryCode);
       if (hit) {
         race.lat = hit.lat;
         race.lon = hit.lon;
@@ -384,12 +459,67 @@ async function main() {
   }
   await saveGeocodeCache(cache);
 
+  // Apply per-race manual overrides — last step before writing. This is
+  // what makes hand-corrected coords (or web-researched venue locations)
+  // survive a re-fetch. ITRA gives us a city-level (or worse) field;
+  // overrides let us pin specific peaks / villages where the race actually
+  // happens, without diverging from the auto-geocoded baseline for the
+  // races we trust.
+  const overrides = await loadOverrides();
+  let overridden = 0;
+  for (const race of races) {
+    const o = overrides[race.id];
+    if (!o || typeof o !== 'object') continue;
+    if (typeof o.lat === 'number' && typeof o.lon === 'number') {
+      race.lat = o.lat;
+      race.lon = o.lon;
+    }
+    if (o.city || o.country) {
+      race.location = {
+        city: o.city ?? race.location?.city,
+        country: o.country ?? race.location?.country,
+        raw: `${o.city ?? race.location?.city ?? ''}, ${o.country ?? race.location?.country ?? ''} (override:${o.source ?? 'manual'})`,
+      };
+    }
+    overridden++;
+  }
+  if (overridden > 0) {
+    console.log(`      Applied ${overridden} location override(s) from race-location-overrides.json`);
+  }
+
   console.log(`[4/4] Writing ${OUT_FILE}`);
   const out: RunnerJson = { runner, races, fetchedAt: new Date().toISOString() };
   await writeFile(OUT_FILE, JSON.stringify(out, null, 2), 'utf8');
 
   const placed = races.filter((r) => r.lat != null).length;
   console.log(`\nDone. ${placed}/${races.length} races placed on map.`);
+}
+
+type RaceOverride = {
+  city?: string;
+  country?: string;
+  lat?: number;
+  lon?: number;
+  source?: string;
+  confidence?: string;
+  note?: string;
+};
+
+async function loadOverrides(): Promise<Record<string, RaceOverride>> {
+  if (!existsSync(OVERRIDES_FILE)) return {};
+  try {
+    const raw = JSON.parse(await readFile(OVERRIDES_FILE, 'utf8')) as Record<string, unknown>;
+    // Strip the doc/schema metadata keys (anything starting with "_").
+    const out: Record<string, RaceOverride> = {};
+    for (const [k, v] of Object.entries(raw)) {
+      if (k.startsWith('_')) continue;
+      if (v && typeof v === 'object') out[k] = v as RaceOverride;
+    }
+    return out;
+  } catch (e) {
+    console.warn(`      ! Failed to read overrides: ${(e as Error).message}`);
+    return {};
+  }
 }
 
 main().catch((err) => {
